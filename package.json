@@ -1,15 +1,18 @@
 {
-  "name": "ens",
-  "version": "0.1.0",
+  "name": "ens-integration",
+  "version": "1.0.0",
+  "description": "Production ENS integration with direct contract calls",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify-ens": "npx tsx scripts/verify-ens.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.20",
+    "ethers": "^6.16.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -24,6 +27,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

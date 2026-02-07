@@ -23,7 +23,34 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'ipfs.io',
       },
+      {
+        protocol: 'https',
+        hostname: 'euc.li',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.cloudflare-ipfs.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.mypinata.cloud',
+      },
+      {
+        protocol: 'https',
+        hostname: 'gateway.pinata.cloud',
+      },
+      {
+        protocol: 'https',
+        hostname: 'arweave.net',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.amazonaws.com',
+      },
     ],
+    dangerouslyAllowSVG: true,
+    contentDispositionType: 'attachment',
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
 
