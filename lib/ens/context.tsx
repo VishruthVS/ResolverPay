@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
 /**
  * ENS Context Provider
  * Provides ENS resolver instance to the entire application
  */
 
-import React, { createContext, useContext, useMemo } from 'react';
-import { ethers } from 'ethers';
-import { ENSResolver } from '@/lib/ens/resolver';
-import type { ENSProfile, MultiChainAddress } from '@/lib/ens/types';
+import { ENSResolver } from "@/lib/ens/resolver";
+import type { ENSProfile, MultiChainAddress } from "@/lib/ens/types";
+import { ethers } from "ethers";
+import React, { createContext, useContext, useMemo } from "react";
 
 interface ENSContextValue {
   resolver: ENSResolver;
@@ -18,7 +18,10 @@ interface ENSContextValue {
   getProfile: (name: string) => Promise<ENSProfile | null>;
   getAvatar: (name: string) => Promise<string | null>;
   getTextRecord: (name: string, key: string) => Promise<string | null>;
-  getMultiChainAddress: (name: string, coinType: number) => Promise<string | null>;
+  getMultiChainAddress: (
+    name: string,
+    coinType: number,
+  ) => Promise<string | null>;
   getAllChainAddresses: (name: string) => Promise<MultiChainAddress[]>;
   validateName: (name: string) => { valid: boolean; error?: string };
 }
@@ -34,10 +37,10 @@ export function ENSProvider({ children, rpcUrl }: ENSProviderProps) {
   // Create resolver instance with RPC URL from env or provided prop
   const resolver = useMemo(() => {
     const url = rpcUrl || process.env.NEXT_PUBLIC_RPC_URL;
-    
+
     if (!url) {
-      console.warn('No RPC URL provided, using default Ethereum provider');
-      return new ENSResolver(ethers.getDefaultProvider('mainnet'));
+      console.warn("No RPC URL provided, using default Ethereum provider");
+      return new ENSResolver(ethers.getDefaultProvider("mainnet"));
     }
 
     const provider = new ethers.JsonRpcProvider(url);
@@ -52,16 +55,20 @@ export function ENSProvider({ children, rpcUrl }: ENSProviderProps) {
       reverseLookup: (address: string) => resolver.reverseLookup(address),
       getProfile: (name: string) => resolver.getProfile(name),
       getAvatar: (name: string) => resolver.getAvatar(name),
-      getTextRecord: (name: string, key: string) => resolver.getTextRecord(name, key),
+      getTextRecord: (name: string, key: string) =>
+        resolver.getTextRecord(name, key),
       getMultiChainAddress: (name: string, coinType: number) =>
         resolver.getMultiChainAddress(name, coinType),
-      getAllChainAddresses: (name: string) => resolver.getAllChainAddresses(name),
+      getAllChainAddresses: (name: string) =>
+        resolver.getAllChainAddresses(name),
       validateName: (name: string) => resolver.validateName(name),
     }),
-    [resolver]
+    [resolver],
   );
 
-  return <ENSContext.Provider value={contextValue}>{children}</ENSContext.Provider>;
+  return (
+    <ENSContext.Provider value={contextValue}>{children}</ENSContext.Provider>
+  );
 }
 
 /**
@@ -69,11 +76,11 @@ export function ENSProvider({ children, rpcUrl }: ENSProviderProps) {
  */
 export function useENS() {
   const context = useContext(ENSContext);
-  
+
   if (!context) {
-    throw new Error('useENS must be used within an ENSProvider');
+    throw new Error("useENS must be used within an ENSProvider");
   }
-  
+
   return context;
 }
 
@@ -100,12 +107,12 @@ export function useENSProfile(name: string | null) {
       .then((result) => {
         setProfile(result);
         if (!result) {
-          setError('Profile not found or name not registered');
+          setError("Profile not found or name not registered");
         }
       })
       .catch((err) => {
-        console.error('Failed to fetch ENS profile:', err);
-        setError(err.message || 'Failed to fetch profile');
+        console.error("Failed to fetch ENS profile:", err);
+        setError(err.message || "Failed to fetch profile");
         setProfile(null);
       })
       .finally(() => {
@@ -139,12 +146,12 @@ export function useENSAddress(name: string | null) {
       .then((result) => {
         setAddress(result);
         if (!result) {
-          setError('Address not found');
+          setError("Address not found");
         }
       })
       .catch((err) => {
-        console.error('Failed to resolve ENS address:', err);
-        setError(err.message || 'Failed to resolve address');
+        console.error("Failed to resolve ENS address:", err);
+        setError(err.message || "Failed to resolve address");
         setAddress(null);
       })
       .finally(() => {
@@ -178,12 +185,12 @@ export function useENSName(address: string | null) {
       .then((result) => {
         setName(result);
         if (!result) {
-          setError('No ENS name found for this address');
+          setError("No ENS name found for this address");
         }
       })
       .catch((err) => {
-        console.error('Failed to reverse lookup ENS name:', err);
-        setError(err.message || 'Failed to reverse lookup');
+        console.error("Failed to reverse lookup ENS name:", err);
+        setError(err.message || "Failed to reverse lookup");
         setName(null);
       })
       .finally(() => {
@@ -218,8 +225,8 @@ export function useMultiChainAddresses(name: string | null) {
         setAddresses(result);
       })
       .catch((err) => {
-        console.error('Failed to fetch multi-chain addresses:', err);
-        setError(err.message || 'Failed to fetch addresses');
+        console.error("Failed to fetch multi-chain addresses:", err);
+        setError(err.message || "Failed to fetch addresses");
         setAddresses([]);
       })
       .finally(() => {

@@ -201,10 +201,7 @@ export default function ENSProfile() {
               )}
 
               {profile.discord && (
-                <ProfileField
-                  label="Discord"
-                  value={profile.discord}
-                />
+                <ProfileField label="Discord" value={profile.discord} />
               )}
 
               {profile.telegram && (

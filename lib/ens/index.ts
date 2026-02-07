@@ -3,6 +3,7 @@
  * Main entry point for ENS functionality
  */
 
-export { ENSResolver, createENSResolver } from './resolver';
-export { ENSProvider, useENS, useENSProfile, useENSAddress, useENSName, useMultiChainAddresses } from './context';
+export { ENSProvider, useENS, useENSAddress, useENSName, useENSProfile, useMultiChainAddresses } from './context';
+export { createENSResolver, ENSResolver } from './resolver';
 export * from './types';
+

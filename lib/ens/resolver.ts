@@ -15,16 +15,16 @@
 
 import { ethers } from 'ethers';
 import {
-  ENSProfile,
-  ENSTextRecord,
-  MultiChainAddress,
-  ENSRegistryInfo,
-  ContentHashInfo,
-  ENSError,
-  ENS_CONTRACTS,
-  TEXT_RECORD_KEYS,
-  COIN_TYPES,
-  INTERFACE_IDS,
+    COIN_TYPES,
+    ContentHashInfo,
+    ENSError,
+    ENSProfile,
+    ENSRegistryInfo,
+    ENSTextRecord,
+    ENS_CONTRACTS,
+    INTERFACE_IDS,
+    MultiChainAddress,
+    TEXT_RECORD_KEYS,
 } from './types';
 
 // ABI definitions for ENS contracts
