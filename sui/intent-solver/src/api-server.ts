@@ -679,11 +679,9 @@ async function main() {
           return;
         }
         if (intent.status !== STATUS_OPEN) {
-          res
-            .status(400)
-            .json({
-              error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
-            });
+          res.status(400).json({
+            error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
+          });
           return;
         }
         if (Date.now() > Number(intent.deadline)) {
@@ -704,42 +702,49 @@ async function main() {
         const minOutput = BigInt(intent.min_output_amount);
         const outputToProvide = minOutput + (minOutput * 5n) / 100n; // +5% buffer
 
-        // Get solver's output coins
-        const outputCoins = await suiClient.getCoins({
-          owner: solverAddr,
-          coinType: outputType,
-        });
-        if (!outputCoins.data.length) {
-          res.status(400).json({
-            error: `Solver has no ${outputType} coins. Fund the solver wallet first.`,
-          });
-          return;
-        }
-        const totalOutputBalance = outputCoins.data.reduce(
-          (s, c) => s + BigInt(c.balance),
-          0n
-        );
-        if (totalOutputBalance < outputToProvide) {
-          res.status(400).json({
-            error: `Insufficient output balance. Have ${totalOutputBalance}, need ${outputToProvide}`,
-          });
-          return;
-        }
-
         // Build transaction
         const tx = new TransactionBlock();
+        let paymentCoin;
 
-        // Prepare output coin
-        let sourceCoin = tx.object(outputCoins.data[0].coinObjectId);
-        if (outputCoins.data.length > 1) {
-          tx.mergeCoins(
-            sourceCoin,
-            outputCoins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+        if (outputType === SUI_TYPE) {
+          // SUI output: split from gas coin to avoid consuming all gas coins
+          [paymentCoin] = tx.splitCoins(tx.gas, [
+            tx.pure.u64(outputToProvide.toString()),
+          ]);
+        } else {
+          // Non-SUI output: find and merge coins
+          const outputCoins = await suiClient.getCoins({
+            owner: solverAddr,
+            coinType: outputType,
+          });
+          if (!outputCoins.data.length) {
+            res.status(400).json({
+              error: `Solver has no ${outputType} coins. Fund the solver wallet first.`,
+            });
+            return;
+          }
+          const totalOutputBalance = outputCoins.data.reduce(
+            (s, c) => s + BigInt(c.balance),
+            0n
           );
+          if (totalOutputBalance < outputToProvide) {
+            res.status(400).json({
+              error: `Insufficient output balance. Have ${totalOutputBalance}, need ${outputToProvide}`,
+            });
+            return;
+          }
+
+          let sourceCoin = tx.object(outputCoins.data[0].coinObjectId);
+          if (outputCoins.data.length > 1) {
+            tx.mergeCoins(
+              sourceCoin,
+              outputCoins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+            );
+          }
+          [paymentCoin] = tx.splitCoins(sourceCoin, [
+            tx.pure.u64(outputToProvide.toString()),
+          ]);
         }
-        const [paymentCoin] = tx.splitCoins(sourceCoin, [
-          tx.pure.u64(outputToProvide.toString()),
-        ]);
 
         // Execute intent → returns Balance<InputAsset>
         const [inputBalance] = tx.moveCall({
@@ -839,11 +844,9 @@ async function main() {
           return;
         }
         if (intent.status !== STATUS_OPEN) {
-          res
-            .status(400)
-            .json({
-              error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
-            });
+          res.status(400).json({
+            error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
+          });
           return;
         }
 
@@ -1211,11 +1214,9 @@ async function main() {
           return;
         }
         if (intent.status !== STATUS_OPEN) {
-          res
-            .status(400)
-            .json({
-              error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
-            });
+          res.status(400).json({
+            error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
+          });
           return;
         }
         if (Date.now() > Number(intent.deadline)) {
@@ -1231,46 +1232,53 @@ async function main() {
         const minOutput = BigInt(intent.min_output_amount);
         const outputToProvide = minOutput + (minOutput * 5n) / 100n;
 
-        // Get solver's output coins
-        const outputCoins = await suiClient.getCoins({
-          owner: solverAddr,
-          coinType: outputType,
-        });
-        if (!outputCoins.data.length) {
-          res.status(400).json({
-            error: `Solver has no ${outputType} coins. Fund the solver wallet first.`,
-          });
-          return;
-        }
-        const totalOutputBalance = outputCoins.data.reduce(
-          (s, c) => s + BigInt(c.balance),
-          0n
-        );
-        if (totalOutputBalance < outputToProvide) {
-          res.status(400).json({
-            error: `Insufficient output balance. Have ${totalOutputBalance}, need ${outputToProvide}`,
-          });
-          return;
-        }
-
         console.log(
           `📡 [build] Execute intent ${(intentId as string).slice(0, 10)}... for solver ${solverAddr.slice(0, 10)}...`
         );
 
         const tx = new TransactionBlock();
         tx.setSender(solverAddr);
+        let paymentCoin;
 
-        // Prepare output coin
-        let sourceCoin = tx.object(outputCoins.data[0].coinObjectId);
-        if (outputCoins.data.length > 1) {
-          tx.mergeCoins(
-            sourceCoin,
-            outputCoins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+        if (outputType === SUI_TYPE) {
+          // SUI output: split from gas coin to avoid consuming all gas coins
+          [paymentCoin] = tx.splitCoins(tx.gas, [
+            tx.pure.u64(outputToProvide.toString()),
+          ]);
+        } else {
+          // Non-SUI output: find and merge coins
+          const outputCoins = await suiClient.getCoins({
+            owner: solverAddr,
+            coinType: outputType,
+          });
+          if (!outputCoins.data.length) {
+            res.status(400).json({
+              error: `Solver has no ${outputType} coins. Fund the solver wallet first.`,
+            });
+            return;
+          }
+          const totalOutputBalance = outputCoins.data.reduce(
+            (s, c) => s + BigInt(c.balance),
+            0n
           );
+          if (totalOutputBalance < outputToProvide) {
+            res.status(400).json({
+              error: `Insufficient output balance. Have ${totalOutputBalance}, need ${outputToProvide}`,
+            });
+            return;
+          }
+
+          let sourceCoin = tx.object(outputCoins.data[0].coinObjectId);
+          if (outputCoins.data.length > 1) {
+            tx.mergeCoins(
+              sourceCoin,
+              outputCoins.data.slice(1).map((c) => tx.object(c.coinObjectId))
+            );
+          }
+          [paymentCoin] = tx.splitCoins(sourceCoin, [
+            tx.pure.u64(outputToProvide.toString()),
+          ]);
         }
-        const [paymentCoin] = tx.splitCoins(sourceCoin, [
-          tx.pure.u64(outputToProvide.toString()),
-        ]);
 
         // Execute intent → returns Balance<InputAsset>
         const [inputBalance] = tx.moveCall({
@@ -1352,11 +1360,9 @@ async function main() {
           return;
         }
         if (intent.status !== STATUS_OPEN) {
-          res
-            .status(400)
-            .json({
-              error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
-            });
+          res.status(400).json({
+            error: `Intent is not open (status: ${STATUS_LABEL[intent.status]})`,
+          });
           return;
         }
 
