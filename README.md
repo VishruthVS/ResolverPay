@@ -16,8 +16,7 @@ NEXT_PUBLIC_RPC_URL=https://ethereum.publicnode.com
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) or any port of your choice
-
+4. Open [http://localhost:3000](http://localhost:3000) 
 ## Features
 
 - Forward resolution (name to address)
