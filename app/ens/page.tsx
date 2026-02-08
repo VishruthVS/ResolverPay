@@ -1,6 +1,6 @@
 "use client";
 
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
 const ENSProfile = dynamic(() => import("@/components/ENSProfile"), {

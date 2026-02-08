@@ -7,7 +7,7 @@ const Index = () => {
   useEffect(() => {
     redirect("/ens");
   }, []);
-  
+
   return null;
 };
 
