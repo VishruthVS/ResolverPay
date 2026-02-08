@@ -1,5 +1,14 @@
-import ENSProfile from "@/components/ENSProfile";
-import SubdomainCreator from "@/components/SubdomainCreator";
+"use client";
+
+import dynamic from 'next/dynamic';
+
+const ENSProfile = dynamic(() => import("@/components/ENSProfile"), {
+  ssr: false,
+});
+
+const SubdomainCreator = dynamic(() => import("@/components/SubdomainCreator"), {
+  ssr: false,
+});
 
 export default function Home() {
   return (

@@ -7,9 +7,17 @@
 
 import { ethers } from 'ethers';
 
-// ENS Contract Addresses (Ethereum Mainnet)
-const NAME_WRAPPER_ADDRESS = '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401';
-const PUBLIC_RESOLVER_ADDRESS = '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63';
+// ENS Contract Addresses by Network
+const CONTRACT_ADDRESSES: Record<number, { nameWrapper: string; publicResolver: string }> = {
+  1: { // Ethereum Mainnet
+    nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401',
+    publicResolver: '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63',
+  },
+  11155111: { // Sepolia
+    nameWrapper: '0x0635513f179D50A207757E05759CbD106d7dFcE8',
+    publicResolver: '0x8FADE66B79cC9f707aB26799354482EB93a5B7dD',
+  },
+};
 
 // Fuse constants from ENS NameWrapper
 export const FUSES = {
@@ -42,10 +50,39 @@ const RESOLVER_ABI = [
 export class SubdomainManager {
   private signer: ethers.Signer;
   private provider: ethers.Provider;
+  private chainId: number | null = null;
 
   constructor(signer: ethers.Signer) {
     this.signer = signer;
     this.provider = signer.provider!;
+  }
+
+  /**
+   * Get the current network chain ID
+   */
+  private async getChainId(): Promise<number> {
+    if (this.chainId === null) {
+      const network = await this.provider.getNetwork();
+      this.chainId = Number(network.chainId);
+    }
+    return this.chainId;
+  }
+
+  /**
+   * Get contract addresses for current network
+   */
+  private async getContractAddresses(): Promise<{ nameWrapper: string; publicResolver: string }> {
+    const chainId = await this.getChainId();
+    const addresses = CONTRACT_ADDRESSES[chainId];
+    
+    if (!addresses) {
+      const networkName = chainId === 137 ? 'Polygon' : chainId === 8453 ? 'Base' : chainId === 10 ? 'Optimism' : `Chain ${chainId}`;
+      throw new Error(
+        `ENS subdomain creation is not available on ${networkName}. Please switch to Ethereum Mainnet (Chain 1) or Sepolia Testnet (Chain 11155111) in your wallet.`
+      );
+    }
+    
+    return addresses;
   }
 
   /**
@@ -75,17 +112,27 @@ export class SubdomainManager {
    */
   async isWrapped(domain: string): Promise<boolean> {
     try {
+      const chainId = await this.getChainId();
+      const { nameWrapper: nameWrapperAddress } = await this.getContractAddresses();
+      
+      console.log(`Checking if ${domain} is wrapped on chain ${chainId}`);
+      console.log(`Using NameWrapper: ${nameWrapperAddress}`);
+      
       const nameWrapper = new ethers.Contract(
-        NAME_WRAPPER_ADDRESS,
+        nameWrapperAddress,
         NAME_WRAPPER_ABI,
         this.provider
       );
 
       const tokenId = this.nameToTokenId(domain);
+      console.log(`Token ID: ${tokenId}`);
+      
       const owner = await nameWrapper.ownerOf(tokenId);
+      console.log(`Owner: ${owner}`);
 
       return owner !== ethers.ZeroAddress;
     } catch (error) {
+      console.error(`Error checking if ${domain} is wrapped:`, error);
       // If ownerOf reverts, the name is not wrapped
       return false;
     }
@@ -96,8 +143,9 @@ export class SubdomainManager {
    */
   async checkOwnership(domain: string, address: string): Promise<boolean> {
     try {
+      const { nameWrapper: nameWrapperAddress } = await this.getContractAddresses();
       const nameWrapper = new ethers.Contract(
-        NAME_WRAPPER_ADDRESS,
+        nameWrapperAddress,
         NAME_WRAPPER_ABI,
         this.provider
       );
@@ -121,8 +169,9 @@ export class SubdomainManager {
     expiry: bigint;
   } | null> {
     try {
+      const { nameWrapper: nameWrapperAddress } = await this.getContractAddresses();
       const nameWrapper = new ethers.Contract(
-        NAME_WRAPPER_ADDRESS,
+        nameWrapperAddress,
         NAME_WRAPPER_ABI,
         this.provider
       );
@@ -130,7 +179,11 @@ export class SubdomainManager {
       const tokenId = this.nameToTokenId(domain);
       const [owner, fuses, expiry] = await nameWrapper.getData(tokenId);
 
-      return { owner, fuses, expiry };
+      return { 
+        owner, 
+        fuses: Number(fuses), 
+        expiry: BigInt(expiry) 
+      };
     } catch (error) {
       console.error('Error getting name data:', error);
       return null;
@@ -145,8 +198,9 @@ export class SubdomainManager {
       const subdomainName = `${label}.${parentDomain}`;
       const tokenId = this.nameToTokenId(subdomainName);
 
+      const { nameWrapper: nameWrapperAddress } = await this.getContractAddresses();
       const nameWrapper = new ethers.Contract(
-        NAME_WRAPPER_ADDRESS,
+        nameWrapperAddress,
         NAME_WRAPPER_ABI,
         this.provider
       );
@@ -221,16 +275,37 @@ export class SubdomainManager {
         };
       }
 
+      // Check if parent has CANNOT_CREATE_SUBDOMAIN fuse burned
+      const CANNOT_CREATE_SUBDOMAIN_FUSE = 32;
+      const fusesNum = Number(parentData.fuses);
+      if ((fusesNum & CANNOT_CREATE_SUBDOMAIN_FUSE) !== 0) {
+        return {
+          success: false,
+          error: 'Parent name has CANNOT_CREATE_SUBDOMAIN fuse burned. You cannot create subdomains.',
+        };
+      }
+
+      const { nameWrapper: nameWrapperAddress } = await this.getContractAddresses();
       const nameWrapper = new ethers.Contract(
-        NAME_WRAPPER_ADDRESS,
+        nameWrapperAddress,
         NAME_WRAPPER_ABI,
         this.signer
       );
 
       const parentNode = this.namehash(parentDomain);
       
-      // Default: PARENT_CANNOT_CONTROL (emancipated subdomain)
-      const fuses = options?.fuses ?? FUSES.PARENT_CANNOT_CONTROL;
+      // Check if parent is locked (has CANNOT_UNWRAP burned)
+      const CANNOT_UNWRAP = 1;
+      const parentIsLocked = (Number(parentData.fuses) & CANNOT_UNWRAP) !== 0;
+      
+      // Default: PARENT_CANNOT_CONTROL only if parent is locked
+      // If parent isn't locked, create a regular subdomain (no fuses)
+      let fuses = options?.fuses ?? 0;
+      
+      if (!parentIsLocked && fuses !== 0) {
+        console.warn('Parent is not locked. Creating subdomain without fuses.');
+        fuses = 0;
+      }
       
       // Expiry: match parent or set custom duration (capped at parent's expiry)
       let expiry: bigint;
@@ -275,11 +350,29 @@ export class SubdomainManager {
         transactionHash: receipt.hash,
         subdomainName,
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating subdomain:', error);
+      
+      // Parse common NameWrapper errors
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error.message) {
+        if (error.message.includes('OperationProhibited')) {
+          errorMessage = 'Operation prohibited. The parent name may have restrictions preventing subdomain creation.';
+        } else if (error.message.includes('Unauthorized')) {
+          errorMessage = 'Unauthorized. You do not have permission to create subdomains for this name.';
+        } else if (error.message.includes('Expired')) {
+          errorMessage = 'The parent name has expired.';
+        } else if (error.message.includes('user rejected')) {
+          errorMessage = 'Transaction rejected by user.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       };
     }
   }
@@ -293,7 +386,8 @@ export class SubdomainManager {
     resolverAddress?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const resolver = resolverAddress || PUBLIC_RESOLVER_ADDRESS;
+      const { publicResolver } = await this.getContractAddresses();
+      const resolver = resolverAddress || publicResolver;
       const resolverContract = new ethers.Contract(
         resolver,
         RESOLVER_ABI,
@@ -324,7 +418,8 @@ export class SubdomainManager {
     resolverAddress?: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const resolver = resolverAddress || PUBLIC_RESOLVER_ADDRESS;
+      const { publicResolver } = await this.getContractAddresses();
+      const resolver = resolverAddress || publicResolver;
       const resolverContract = new ethers.Contract(
         resolver,
         RESOLVER_ABI,

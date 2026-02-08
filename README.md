@@ -25,6 +25,15 @@ npm run dev
 - Text records (avatar, social profiles)
 - Multi-chain addresses
 - Content hash resolution
+- Subdomain creation (NameWrapper-based)
+- Multi-network support (Mainnet & Sepolia)
+
+## Supported Networks
+
+- **Ethereum Mainnet** (Chain ID: 1)
+- **Sepolia Testnet** (Chain ID: 11155111)
+
+The app automatically detects the connected network and uses the appropriate ENS contracts.
 
 ## Tech Stack
 

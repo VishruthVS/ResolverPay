@@ -10,11 +10,86 @@ export default function SubdomainCreator() {
   const [ownerAddress, setOwnerAddress] = useState('');
   const [walletConnected, setWalletConnected] = useState(false);
   const [userAddress, setUserAddress] = useState('');
+  const [network, setNetwork] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{
     type: 'success' | 'error' | 'info' | null;
     message: string;
   }>({ type: null, message: '' });
+
+  const switchToSepolia = async () => {
+    try {
+      if (typeof window.ethereum === 'undefined') {
+        setStatus({
+          type: 'error',
+          message: 'MetaMask not installed',
+        });
+        return;
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      
+      try {
+        // Try to switch to Sepolia
+        await provider.send('wallet_switchEthereumChain', [
+          { chainId: '0xaa36a7' } // 11155111 in hex
+        ]);
+        
+        setStatus({
+          type: 'success',
+          message: 'Switched to Sepolia! Please reconnect your wallet.',
+        });
+        
+        // Reset connection state
+        setWalletConnected(false);
+        setNetwork('');
+        
+      } catch (switchError: any) {
+        // This error code indicates that the chain has not been added to MetaMask
+        if (switchError.code === 4902) {
+          try {
+            await provider.send('wallet_addEthereumChain', [
+              {
+                chainId: '0xaa36a7',
+                chainName: 'Sepolia Test Network',
+                nativeCurrency: {
+                  name: 'Sepolia ETH',
+                  symbol: 'ETH',
+                  decimals: 18
+                },
+                rpcUrls: ['https://rpc.sepolia.org'],
+                blockExplorerUrls: ['https://sepolia.etherscan.io']
+              }
+            ]);
+            
+            setStatus({
+              type: 'success',
+              message: 'Sepolia network added! Please reconnect your wallet.',
+            });
+            
+            setWalletConnected(false);
+            setNetwork('');
+            
+          } catch (addError) {
+            setStatus({
+              type: 'error',
+              message: 'Failed to add Sepolia network',
+            });
+          }
+        } else {
+          setStatus({
+            type: 'error',
+            message: switchError?.message || 'Failed to switch network',
+          });
+        }
+      }
+    } catch (error: any) {
+      setStatus({
+        type: 'error',
+        message: error?.message || 'An error occurred',
+      });
+    }
+  };
 
   const connectWallet = async () => {
     try {
@@ -30,14 +105,29 @@ export default function SubdomainCreator() {
       await provider.send('eth_requestAccounts', []);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
+      
+      // Get network info
+      const net = await provider.getNetwork();
+      const chainId = Number(net.chainId);
+      const networkName = chainId === 1 ? 'Mainnet' : chainId === 11155111 ? 'Sepolia' : `Unsupported (Chain ${chainId})`;
+      const isSupported = chainId === 1 || chainId === 11155111;
 
       setUserAddress(address);
       setOwnerAddress(address);
+      setNetwork(networkName);
       setWalletConnected(true);
-      setStatus({
-        type: 'success',
-        message: `Connected: ${address.slice(0, 6)}...${address.slice(-4)}`,
-      });
+      
+      if (!isSupported) {
+        setStatus({
+          type: 'error',
+          message: `Connected to ${networkName}. Please switch to Ethereum Mainnet or Sepolia Testnet in MetaMask.`,
+        });
+      } else {
+        setStatus({
+          type: 'success',
+          message: `Connected to ${networkName}: ${address.slice(0, 6)}...${address.slice(-4)}`,
+        });
+      }
     } catch (error: any) {
       setStatus({
         type: 'error',
@@ -85,7 +175,7 @@ export default function SubdomainCreator() {
       if (!isOwner) {
         setStatus({
           type: 'error',
-          message: `You don't own ${parentDomain}. Only the owner can create subdomains.`,
+          message: `You don't own ${parentDomain}. Only the owner can create subdomains. Make sure the name is wrapped and you own it.`,
         });
         setLoading(false);
         return;
@@ -105,13 +195,23 @@ export default function SubdomainCreator() {
 
       // Create subdomain
       setStatus({ type: 'info', message: 'Creating subdomain... Confirm transaction in wallet.' });
+      
+      // Get network and set appropriate resolver
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      const resolverAddresses: Record<number, string> = {
+        1: '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63', // Mainnet
+        11155111: '0x8FADE66B79cC9f707aB26799354482EB93a5B7dD', // Sepolia
+      };
+      
+      // Try without fuses first (will use PARENT_CANNOT_CONTROL only if parent is locked)
       const result = await manager.createSubdomain(
         parentDomain,
         label,
         ownerAddress,
         {
-          resolverAddress: '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63', // Public Resolver
-          fuses: FUSES.PARENT_CANNOT_CONTROL, // Emancipated subdomain
+          resolverAddress: resolverAddresses[chainId],
+          fuses: 0, // Let the manager decide based on parent lock status
         }
       );
 
@@ -146,6 +246,35 @@ export default function SubdomainCreator() {
         <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-6">
           Create subdomains under your owned ENS domains
         </p>
+
+        {network && (
+          <div className={`mb-4 p-3 border rounded-lg ${
+            network.includes('Unsupported') 
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+          }`}>
+            <p className={`text-sm ${
+              network.includes('Unsupported')
+                ? 'text-red-800 dark:text-red-200'
+                : 'text-blue-800 dark:text-blue-200'
+            }`}>
+              <strong>Network:</strong> {network}
+              {network.includes('Unsupported') && (
+                <>
+                  <span className="block mt-2 text-xs">
+                    You need to be on Ethereum Mainnet or Sepolia Testnet
+                  </span>
+                  <button
+                    onClick={switchToSepolia}
+                    className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg font-medium transition-colors"
+                  >
+                    Switch to Sepolia Testnet
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         {!walletConnected ? (
           <button
@@ -182,7 +311,7 @@ export default function SubdomainCreator() {
                 value={label}
                 onChange={(e) => setLabel(e.target.value.toLowerCase())}
                 placeholder="subdomain"
-                pattern="[a-z0-9-]+"
+                pattern="[a-z0-9\-]+"
                 className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
