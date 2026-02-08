@@ -35,6 +35,138 @@ npm run dev
 
 The app automatically detects the connected network and uses the appropriate ENS contracts.
 
+## Subdomain Creation Flow
+
+The subdomain creation system performs a 10-step validation and execution process:
+
+### Process Overview
+
+| Step | Phase | Action | Example |
+|------|-------|--------|---------|
+| 1️⃣ | **User Input** | Parent name + label entry | `vishruth2025taipei.eth` + `devine` |
+| 2️⃣ | **Network Check** | Detect and validate chain | Sepolia (11155111) ✓ |
+| 3️⃣ | **Wrapped Check** | Verify parent is wrapped | `isWrapped()` → `0x657...` ✓ |
+| 4️⃣ | **Owner Verification** | Confirm wallet ownership | `checkOwnership()` → Match ✓ |
+| 5️⃣ | **Availability Check** | Ensure subdomain is free | `isAvailable()` → Available ✓ |
+| 6️⃣ | **Hashing** | Calculate node identifiers | `parentNode`, `labelHash`, `subdomainNode` |
+| 7️⃣ | **Parent Data** | Retrieve parent metadata | Fuses: 0, Expiry: 2026 |
+| 8️⃣ | **Fuses Logic** | Determine subdomain fuses | Parent not locked → Fuses: 0 |
+| 9️⃣ | **Contract TX** | Execute `setSubnodeRecord()` | Gas: ~150k, Sign & Send |
+| 🔟 | **Success** | Subdomain created | `devine.vishruth2025taipei.eth` ✓ |
+
+### Detailed Flow
+
+```
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│ User Input  │ → │ Network     │ → │ Wrapped     │ → │ Owner       │ → │ Availability│
+│             │   │ Check       │   │ Check       │   │ Verify      │   │ Check       │
+└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
+                                                                                 ↓
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│ Success     │ ← │ Contract    │ ← │ Fuses       │ ← │ Parent      │ ← │ Hashing     │
+│             │   │ Transaction │   │ Logic       │   │ Data        │   │             │
+└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
+```
+
+### Key Components
+
+#### Pre-Flight Checks
+```typescript
+// 1. Network Detection
+const chainId = await provider.getNetwork().then(n => n.chainId);
+// Sepolia: 11155111, Mainnet: 1
+
+// 2. Wrapped Status
+const wrappedAddress = await nameWrapper.ownerOf(parentNode);
+// Returns address if wrapped, throws if not
+
+// 3. Ownership Verification
+const isOwner = wrappedAddress.toLowerCase() === signerAddress.toLowerCase();
+
+// 4. Availability Check
+const existingOwner = await nameWrapper.ownerOf(subdomainNode);
+// Available if owner is 0x0000...0000
+```
+
+#### Fuse Management
+```typescript
+// Parent must be locked (CANNOT_UNWRAP) to set PARENT_CANNOT_CONTROL
+const [owner, parentFuses] = await nameWrapper.getData(parentNode);
+const isParentLocked = (parentFuses & CANNOT_UNWRAP) !== 0n;
+
+let fuses = 0;
+if (isParentLocked) {
+  fuses = PARENT_CANNOT_CONTROL; // 65536
+}
+```
+
+#### Contract Execution
+```typescript
+// Create subdomain with NameWrapper
+await nameWrapper.setSubnodeRecord(
+  parentNode,      // bytes32: parent name hash
+  label,           // string: subdomain label
+  signerAddress,   // address: subdomain owner
+  resolverAddress, // address: resolver contract
+  0,               // uint64: TTL (0 = inherit)
+  fuses,           // uint32: permission fuses
+  expiry           // uint64: expiration timestamp
+);
+```
+
+### Network-Specific Contracts
+
+#### Ethereum Mainnet (Chain ID: 1)
+- **NameWrapper**: `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
+- **Public Resolver**: `0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63`
+- **ENS Registry**: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+
+#### Sepolia Testnet (Chain ID: 11155111)
+- **NameWrapper**: `0x0635513f179D50A207757E05759CbD106d7dFcE8`
+- **Public Resolver**: `0x8FADE66B79cC9f707aB26799354482EB93a5B7dD`
+- **ENS Registry**: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+
+### Fuse Constants
+
+| Fuse | Value | Description |
+|------|-------|-------------|
+| `CANNOT_UNWRAP` | 1 | Prevents unwrapping (locks the name) |
+| `CANNOT_BURN_FUSES` | 2 | Prevents burning additional fuses |
+| `CANNOT_TRANSFER` | 4 | Prevents transferring ownership |
+| `CANNOT_SET_RESOLVER` | 8 | Prevents changing resolver |
+| `CANNOT_SET_TTL` | 16 | Prevents changing TTL |
+| `CANNOT_CREATE_SUBDOMAIN` | 32 | Prevents creating subdomains |
+| `PARENT_CANNOT_CONTROL` | 65536 | Parent cannot reclaim subdomain |
+
+### Example: Creating `devine.vishruth2025taipei.eth`
+
+```typescript
+// Input
+const parentName = "vishruth2025taipei.eth";
+const label = "devine";
+
+// Validation Results
+Network: Sepolia (11155111) ✓
+Wrapped: 0x657... ✓
+Owner: Match ✓
+Available: true ✓
+
+// Calculated Values
+parentNode: 0x8e5f... (namehash of vishruth2025taipei.eth)
+labelHash: 0x9c3a... (keccak256 of "devine")
+subdomainNode: 0x4f7b... (namehash of devine.vishruth2025taipei.eth)
+
+// Parent Data
+Owner: 0x657...
+Fuses: 0 (not locked)
+Expiry: 1767225600 (2026)
+
+// Transaction
+Fuses: 0 (parent not locked, regular subdomain)
+Gas: ~150,000
+Status: Success ✓
+```
+
 ## Tech Stack
 
 - Next.js 16
@@ -42,3 +174,4 @@ The app automatically detects the connected network and uses the appropriate ENS
 - TypeScript
 - ethers.js v6
 - Tailwind CSS
+- ENS NameWrapper Protocol
