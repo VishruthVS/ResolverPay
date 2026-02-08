@@ -1,6 +1,10 @@
-# ENS Profile Manager
+# ResolverPay
 
 **Live Demo:** [https://resolver-pay.vercel.app/](https://resolver-pay.vercel.app/)
+
+This is a multi-chain DeFi platform combining intent-based swaps with decentralized identity management. The project consists of two integrated components: ResolverPay, a production-ready intent-based DEX on Sui that eliminates DeFi complexity through competitive off-chain execution, and a comprehensive ENS integration system for Ethereum-based identity management. Users express desired swap outcomes like "swap 100 SUI for at least 300 USDC" while maintaining consistent identity across chains through ENS profiles. ResolverPay leverages Sui's Programmable Transaction Blocks to bundle entire executions—withdrawing intents, swapping on DeepBook V3, delivering tokens, and capturing profit—into single atomic transactions. The ENS component implements direct smart contract interactions for name resolution, multi-chain address management (10+ networks including Bitcoin, Polygon, Arbitrum), profile management with social media integration, and sophisticated subdomain creation via NameWrapper. Together, the platform bridges CEX simplicity with DeFi self-custody while providing unified identity management across blockchain ecosystems, demonstrating deep protocol understanding through custom implementations without relying on third-party abstraction libraries.
+
+---
 
 ## Quick Start
 
