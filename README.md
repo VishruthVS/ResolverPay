@@ -35,6 +35,178 @@ npm run dev
 
 The app automatically detects the connected network and uses the appropriate ENS contracts.
 
+## System Architecture
+
+The application follows a layered architecture for ENS operations:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                               USER INTERFACE                                    │
+├─────────────────────────────────────┬──────────────────────────────────────────┤
+│  ENSProfile.tsx                     │  SubdomainCreator.tsx                    │
+│  - Search ENS names                 │  - Create subdomains                     │
+│  - Display profiles                 │  - Manage ownership                      │
+│  - Show multi-chain addresses       │  - Set fuses/permissions                 │
+└─────────────────────────────────────┴──────────────────────────────────────────┘
+                                      ↓
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                           REACT CONTEXT LAYER                                   │
+├────────────────────────────────────────────────────────────────────────────────┤
+│  ENSContext (context.tsx)                                                       │
+│  - useENSProfile(name) → Profile data                                           │
+│  - useENSAddress(name) → ETH address                                            │
+│  - useMultiChainAddresses(name) → All chain addresses                           │
+│  - State management & caching                                                   │
+└────────────────────────────────────────────────────────────────────────────────┘
+                                      ↓
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                          CORE ENS RESOLVERS                                     │
+├──────────────────────────────┬─────────────────────────────────────────────────┤
+│  ENSResolver                 │  SubdomainManager                               │
+│  (resolver.ts)               │  (subdomain-manager.ts)                         │
+│  - Name resolution           │  - Subdomain creation                           │
+│  - Multi-chain addresses     │  - Fuse management                              │
+│  - Text records              │  - Ownership verification                       │
+│  - Content hash              │  - Network detection                            │
+└──────────────────────────────┴─────────────────────────────────────────────────┘
+```
+
+## ENS Name Resolution Flow
+
+### Feature: Resolve ENS Name → Ethereum Address
+
+#### Architecture Flow
+```
+┌─────────────────┐
+│ ENSProfile.tsx  │
+│ User Input      │
+└────────┬────────┘
+         │ "vishruth2025taipei.eth"
+         ▼
+┌─────────────────┐
+│ useENSProfile() │
+│ React Hook      │
+└────────┬────────┘
+         │ Triggers getProfile()
+         ▼
+┌─────────────────┐
+│ resolveENS()    │
+│ Core Function   │
+└────────┬────────┘
+         │
+         ├─────────────────────────────────────────┐
+         │                                         │
+         ▼                                         ▼
+┌──────────────────┐                    ┌──────────────────┐
+│ Step 1: namehash │                    │ Step 2: Resolver │
+└──────────────────┘                    └──────────────────┘
+         │                                         │
+         │                                         ▼
+         │                              ┌──────────────────┐
+         │                              │ Step 3: Address  │
+         │                              └──────────────────┘
+         │                                         │
+         └─────────────────────────────────────────┘
+                           │
+                           ▼
+                  ┌────────────────┐
+                  │ Return Profile │
+                  │ Data to UI     │
+                  └────────────────┘
+```
+
+### Step-by-Step Process
+
+#### Step 1: Namehash Calculation
+
+The namehash algorithm converts human-readable names into bytes32 identifiers used by ENS contracts.
+
+```typescript
+// File: lib/ens/resolver.ts:102-140
+function namehash(name: string): string {
+  // Input: "vishruth2025taipei.eth"
+  
+  // Process:
+  // 1. Split by "." → ["vishruth2025taipei", "eth"]
+  // 2. Reverse order → ["eth", "vishruth2025taipei"]
+  // 3. Hash each label recursively:
+  //    - Start: 0x0000...0000 (32 bytes)
+  //    - Hash "eth": keccak256(0x0000...0000 + keccak256("eth"))
+  //      → 0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae
+  //    - Hash "vishruth2025taipei": 
+  //      keccak256(0x93cd... + keccak256("vishruth2025taipei"))
+  //      → 0x83bc9230fca2ab2b9a9f601b123922214f94337c8d51de7d2775558b8d47f619
+  
+  // Output: 0x83bc9230fca2ab2b9a9f601b123922214f94337c8d51de7d2775558b8d47f619
+}
+```
+
+#### Step 2: Get Resolver Address
+
+Query the ENS Registry to find which resolver contract handles this name.
+
+```typescript
+// Contract: ENS Registry (0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e)
+// Network: Sepolia (11155111)
+// Method: resolver(bytes32 node)
+
+const resolverAddress = await registry.resolver(
+  "0x83bc9230fca2ab2b9a9f601b123922214f94337c8d51de7d2775558b8d47f619"
+);
+
+// Returns: 0x8FADE66B79cC9f707aB26799354482EB93a5B7dD
+//          (Sepolia Public Resolver)
+```
+
+#### Step 3: Get ETH Address
+
+Query the resolver contract for the Ethereum address associated with this name.
+
+```typescript
+// Contract: Public Resolver (0x8FADE66B79cC9f707aB26799354482EB93a5B7dD)
+// Method: addr(bytes32 node)
+
+const ethAddress = await resolver.addr(
+  "0x83bc9230fca2ab2b9a9f601b123922214f94337c8d51de7d2775558b8d47f619"
+);
+
+// Returns: 0x657Ec760F0689119DB61155bCa25cfAc5E286Dba
+```
+
+### Complete Example
+
+```typescript
+// Input
+const ensName = "vishruth2025taipei.eth";
+
+// Step 1: Calculate namehash
+const node = namehash(ensName);
+// → 0x83bc9230fca2ab2b9a9f601b123922214f94337c8d51de7d2775558b8d47f619
+
+// Step 2: Get resolver
+const resolverAddr = await registry.resolver(node);
+// → 0x8FADE66B79cC9f707aB26799354482EB93a5B7dD (Sepolia Public Resolver)
+
+// Step 3: Get address
+const ethAddress = await resolver.addr(node);
+// → 0x657Ec760F0689119DB61155bCa25cfAc5E286Dba
+
+// Response Flow: resolver.ts → context.tsx → ENSProfile.tsx
+// Result: {
+//   address: "0x657Ec760F0689119DB61155bCa25cfAc5E286Dba",
+//   name: "vishruth2025taipei.eth"
+// }
+```
+
+### File Locations
+
+| Component | File Path | Lines |
+|-----------|-----------|-------|
+| UI Component | `components/ENSProfile.tsx` | - |
+| React Hook | `lib/ens/context.tsx` | 96-130 |
+| Core Resolver | `lib/ens/resolver.ts` | 102-140 |
+| Namehash Algorithm | `lib/ens/resolver.ts` | - |
+
 ## Subdomain Creation Flow
 
 The subdomain creation system performs a 10-step validation and execution process:
